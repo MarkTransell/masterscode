@@ -49,6 +49,8 @@ class TPAdistance():
 					self.lookuptable[q, z] = self.breakpoints[numpy.max([q,z])-1] - self.breakpoints[numpy.min([q,z])]
 				else:
 					self.lookuptable[q, z] = 0
+					
+	def save(self, filename='BLOSUM62'):
 	
 class Dataset():
 	"""A class for dataset objects with filtering"""
@@ -79,6 +81,7 @@ class Dataset():
 		        
 	def boxfilter(self, cutoff):
 		"""Filter the data using a boxcar filter and store the values in filteredseries"""
+		self.filteredseries = numpy.copy(self.recarray)
 		for i in range(len(self.recarray[0])):
 			fil = signal.boxcar(cutoff)
 			output = signal.convolve(self.recarray[:,i]/cutoff, fil, mode='same')
@@ -123,7 +126,11 @@ class Dataset():
 		
 	def simplestringconvert(self, nsampleseg):
 		"""Use a naive form of PAA to convert the dataset to a character string for BLAST"""
-		fx = numpy.copy(self.filteredseries)
+		try:
+			fx = numpy.copy(self.filteredseries)
+		except:
+			print "No filtered series, using raw data"
+			fx = numpy.copy(self.recarray)
 		nsampleseg = nsampleseg*2
 		rem = (len(fx) - 1) % nsampleseg
 		fx = fx[rem:len(fx)]
@@ -154,8 +161,13 @@ class Dataset():
 		self.recarray[start:end] = self.recarray[start:end] + offset
 		
 	def mutatenoise(self, stddev):
-		self.recarray = self.recarray + numpy.random.normal(0, stddev, len(self.recarray))
-
+		self.recarray[:,:] = self.recarray[:,:] + numpy.random.normal(0, stddev, numpy.shape(self.recarray))
+		
+	def mutateinsert(self, dataset, datastart=0, dataend=-1, start=0):
+		end = start + len(dataset.recarray[datastart:dataend, 0])
+		self.recarray[start:end,0] = dataset.recarray[datastart:dataend, 0]
+		
+		
 class Sequence():
 	"""A class for string objects as sequences, a wrapper for BioPython SeqRecord objects"""
 	def __init__(self, filename='default', format='fa', seq=None, identity='unknown',descrip='unknownsequence'):
@@ -231,23 +243,23 @@ class Match():
 #NOTE: This will be refactored to work with the unittest library ASAP
 
 
-x = Dataset('QueryDat')
-query = Dataset('QueryDat')
-query.boxfilter(2)
-q = Sequence(seq=query.simplestringconvert(2), descrip='QUERYTEST', identity='Q1')
-q.save('querytest')
-x.boxfilter(2)
-p = x.simplestringconvert(2)
-y = Sequence(seq=p, descrip='CONVERSIONTEST', identity='T1')
-y.save('conversiontest')
-dustmask('conversiontest')
-makedb('conversiontest', 'DATABASETEST')
-psiblastme('conversiontest', 'conversiontestdb', 'fulltest')
-#handle = open('fulltest.csv')
-#recs = csv.reader(handle, delimiter = ',')
-#print [float(x) if '.' in x else int(x) if isempty(RWE(x)) for x in recs.next()]
-#print [try float(x) except x for x in recs.next()]
-blastmatch = Match(filename='fulltest')
+#x = Dataset('QueryDat')
+#query = Dataset('QueryDat')
+#query.boxfilter(2)
+#q = Sequence(seq=query.simplestringconvert(2), descrip='QUERYTEST', identity='Q1')
+#q.save('querytest')
+#x.boxfilter(2)
+#p = x.simplestringconvert(2)
+#y = Sequence(seq=p, descrip='CONVERSIONTEST', identity='T1')
+#y.save('conversiontest')
+#dustmask('conversiontest')
+#makedb('conversiontest', 'DATABASETEST')
+#psiblastme('conversiontest', 'conversiontestdb', 'fulltest')
+##handle = open('fulltest.csv')
+##recs = csv.reader(handle, delimiter = ',')
+##print [float(x) if '.' in x else int(x) if isempty(RWE(x)) for x in recs.next()]
+##print [try float(x) except x for x in recs.next()]
+#blastmatch = Match(filename='fulltest')
 #print blastmatch.evalue
 #print blastmatch.Qstart
 #print len(y.simpledataconvert(2))
@@ -258,9 +270,13 @@ blastmatch = Match(filename='fulltest')
 #print Q.breakpoints
 #print Q.lookuptable
 z = Dataset('Data')
-z.mutatenoise(0.5)
-z.plotraw()
-plt.show()
+p = Dataset('QueryDat')
+print len(z.recarray)
+print len(z.recarray[:,0])
+print len(z.recarray[0,:])
+print z.recarray
+z.mutateinsert(p)
+print z.recarray
 
 
 
