@@ -27,12 +27,13 @@ def dustmask(filename):
 
 def makedb(filename, dbname):
 	"""Make a BLAST database out of a masked fasta file, named dbname"""
-	subprocess.Popen('makeblastdb -in ' + filename + 'mask.fa -out ' + filename + 'db.fa -title ' + dbname, shell=True)
+	subprocess.Popen('makeblastdb -in ' + filename + '.fa -input_type fasta -dbtype prot -parse_seqids -out ' + filename + 'db -title ' + dbname, shell=True)
+
 
 def psiblastme(queryname, dbname, resultname):
 	"""Pass the query and database to a shell command which will execute PsiBLAST matching and output the result in resultname.csv"""
-	subprocess.Popen('psiblast -db ' + dbname + '.fa -query ' + queryname + '.fa -out ' + resultname + '.csv -outfmt 10', shell=True)
-
+	subprocess.Popen('psiblast -db ' + dbname + ' -query ' + queryname + '.fa -out ' + resultname + '.csv -outfmt 10', shell=True)
+	
 class TPAdistance():
 	"""A class to generate match scoring matrices for different alphabet sizes, from Keogh, Chiu and Lonardi"""
 	def __init__(self, alphabetsize, dataset):
@@ -51,6 +52,21 @@ class TPAdistance():
 					self.lookuptable[q, z] = 0
 					
 	def save(self, filename='BLOSUM62'):
+		"""A method to rewrite the psiBLAST substitution matrix stored at /usr/share/ncbi/data/(filename)"""
+		scorefile = open('/usr/share/ncbi/data/' + filename, "w")
+		protstring = 'ARNDCQEGHILKMFPSTWYVBJZX*'
+		savematrix = numpy.zeros((25,25))
+		savematrix[0:len(self.lookuptable), 0:len(self.lookuptable)] = 0 - self.lookuptable[:,:]
+		j = 0
+		scorefile.write('   A  R  N  D  C  Q  E  G  H  I  L  K  M  F  P  S  T  W  Y  V  B  J  Z  X  *\n')
+		for char in protstring:
+			scorefile.write(char + '  ')
+			for i in range(25):
+				scorefile.write(str(numpy.round(savematrix[j, i], decimals=3)) + '  ')
+			scorefile.write('\n')
+			j = j + 1
+		scorefile.close()
+		
 	
 class Dataset():
 	"""A class for dataset objects with filtering"""
@@ -124,8 +140,9 @@ class Dataset():
 		plt.legend('123456789')
 		plt.show()
 		
-	def simplestringconvert(self, nsampleseg):
+	def simplestringconvert(self, nsampleseg, TPAobject):
 		"""Use a naive form of PAA to convert the dataset to a character string for BLAST"""
+		protstring = 'ARNDCQEGHILKMFPSTWYVBJZX*'
 		try:
 			fx = numpy.copy(self.filteredseries)
 		except:
@@ -142,18 +159,34 @@ class Dataset():
 		numbertodo = 1
 		while numbertodo < len(fx):
 			avgval = simpsons(range(0, (nsampleseg+1)), fx[(numbertodo-1):(numbertodo+nsampleseg)], h)/nsampleseg
-			if avgval <= 0.25:
-				charac = "E"
-			elif avgval <= 0.43:
-				charac = "D"
-			elif avgval <= 0.57:
-				charac = "T"
-			elif avgval <= 0.75:
-				charac = "M"
+			if avgval < TPAobject.breakpoints[0]:
+				charac = protstring[0]
+			
+			elif avgval >= TPAobject.breakpoints[-1]:
+				charac = protstring[len(TPAobject.breakpoints) + 1]
+			
 			else:
-				charac = "C"
+				for i in range(1, len(TPAobject.breakpoints)):
+					if avgval < TPAobject.breakpoints[i] and avgval >= TPAobject.breakpoints[i-1]:
+						charac = protstring[i]
+		
 			stringreturn = stringreturn + charac
 			numbertodo = numbertodo + nsampleseg
+				
+			
+			
+#			if avgval <= 0.25:
+#				charac = "E"
+#			elif avgval <= 0.43:
+#				charac = "D"
+#			elif avgval <= 0.57:
+#				charac = "T"
+#			elif avgval <= 0.75:
+#				charac = "M"
+#			else:
+#				charac = "C"
+#			stringreturn = stringreturn + charac
+#			numbertodo = numbertodo + nsampleseg
 			        	
 		return stringreturn
 
@@ -215,7 +248,7 @@ class Sequence():
 		
         
 class Match():
-	def __init__(self, filename='default', darray = None):
+	def __init__(self, filename='default', darray=None):
 		if darray:
 			self.matchrecs = darray
 		else:
@@ -243,30 +276,32 @@ class Match():
 #NOTE: This will be refactored to work with the unittest library ASAP
 
 
-#x = Dataset('QueryDat')
-#query = Dataset('QueryDat')
+x = Dataset('QueryDat')
+query = Dataset('QueryDat')
+Q = TPAdistance(8, x)
+Q.save('BLOSUMTEST')
 #query.boxfilter(2)
-#q = Sequence(seq=query.simplestringconvert(2), descrip='QUERYTEST', identity='Q1')
-#q.save('querytest')
+q = Sequence(seq=query.simplestringconvert(2, Q), descrip='QUERYTEST', identity='Q1')
+q.save('querytest')
 #x.boxfilter(2)
-#p = x.simplestringconvert(2)
-#y = Sequence(seq=p, descrip='CONVERSIONTEST', identity='T1')
-#y.save('conversiontest')
-#dustmask('conversiontest')
-#makedb('conversiontest', 'DATABASETEST')
-#psiblastme('conversiontest', 'conversiontestdb', 'fulltest')
+p = x.simplestringconvert(2, Q)
+y = Sequence(seq=p, descrip='CONVERSIONTEST', identity='T1')
+y.save('dbtest')
+dustmask('dbtest')
+makedb('dbtest', 'dbtest')
+psiblastme('querytest', 'dbtestdb', 'fulltest')
 ##handle = open('fulltest.csv')
 ##recs = csv.reader(handle, delimiter = ',')
 ##print [float(x) if '.' in x else int(x) if isempty(RWE(x)) for x in recs.next()]
 ##print [try float(x) except x for x in recs.next()]
-#blastmatch = Match(filename='fulltest')
-#print blastmatch.evalue
-#print blastmatch.Qstart
+blastmatch = Match(filename='fulltest')
+print blastmatch.evalue
+print blastmatch.Qstart
 #print len(y.simpledataconvert(2))
 #print len(x.ts)
 #print len(p)
 #print y.seqs[0]
-#Q = TPAdistance(12, x)
+
 #print Q.breakpoints
 #print Q.lookuptable
 z = Dataset('Data')
